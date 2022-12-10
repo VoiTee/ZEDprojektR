@@ -1,0 +1,268 @@
+---
+title: "Raport 1"
+author: "Wojciech Rzeczycki 140770"
+date: "2022-12-10"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    
+---
+
+
+# 0. Podsumowanie
+Celem projektu jest określenie, jakie mogą być główne przyczyny karłowacenia śledzi oceanicznych wyławianych w Europie
+
+
+# 1. Kod wyliczający wykorzystane biblioteki
+
+```{r, message=FALSE, warning=FALSE}
+
+library(ggplot2)
+library(corrplot)
+library(dplyr)
+library(knitr)
+library(tidyr)
+library(plotly)
+library(caret)
+
+```
+
+# 2. Kod pozwalający wczytać dane z pliku
+
+```{r, message=FALSE, warning=FALSE}
+data <- read.csv("sledzie.csv", sep=',') 
+#data
+```
+
+```{r, cache=TRUE, warning=FALSE, echo=FALSE}
+set.seed(23)
+```
+
+
+# 3. Kod przetwarzający brakujące dane
+Dane zawierały znaki zapytania - zamieniono je na NA, następnie usunięto rekordy, w których występowały. Z powodu występowania znaków zapytania część kolumn otrzymało (niesłusznie) typ char - zamieniono na numeric
+
+```{r, warning=FALSE, echo=FALSE}
+data[data=="?"] <- NA
+#data
+sapply(data, function(x) sum(is.na(x)))
+clearData <- drop_na(data)
+
+flatData <- mutate_all(clearData, function(x) as.numeric(as.character(x)))
+
+```
+
+
+
+# 4. Sekcja podsumowująca rozmiar zbioru i podstawowe statystyki
+
+```{r, warning=FALSE, echo=FALSE}
+summary(flatData)
+head(flatData)
+```
+
+
+
+# 5. Szczegółową analizę wartości atrybutów (np. poprzez prezentację rozkładów wartości)
+
+```{r, warning=FALSE, echo=FALSE}
+
+
+ggplot(flatData, aes(x = length)) + geom_histogram(binwidth = .3, fill="blue") + labs(y = "Ilość wystąpień", title = "Długość śledzia") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = cfin1)) + geom_histogram(binwidth = .9, fill="blue") + labs(y = "Ilość wystąpień", title = "Dostępność planktonu - Calanus finmarchicus gat. 1") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = cfin2)) + geom_histogram(binwidth = .3, fill="blue") + labs(y = "Ilość wystąpień", title = "Dostępność planktonu - Calanus finmarchicus gat. 2") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = chel1)) + geom_histogram(binwidth = .3, fill="blue") + labs(y = "Ilość wystąpień", title = "Dostępność planktonu - Calanus helgolandicus gat. 1") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = chel2)) + geom_histogram(binwidth = .3, fill="blue") + labs(y = "Ilość wystąpień", title = "Dostępność planktonu - Calanus helgolandicus gat. 2") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = lcop1)) + geom_histogram(binwidth = .3, fill="blue") + labs(y = "Ilość wystąpień", title = "Dostępność planktonu - widłogony gat. 1") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = lcop2)) + geom_histogram(binwidth = .3, fill="blue") + labs(y = "Ilość wystąpień", title = "Dostępność planktonu - widłogony gat. 2") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = fbar)) + geom_histogram(binwidth = .1, fill="blue") + labs(y = "Ilość wystąpień", title = "Roczny narybek") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = recr)) + geom_histogram( fill="blue") + labs(y = "Ilość wystąpień", title = "Liczba śledzi w roku") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = cumf)) + geom_histogram(binwidth = .01, fill="blue") + labs(y = "Ilość wystąpień", title = "Łączne natężenie połowów w regionie") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = totaln)) + geom_histogram( fill="blue") + labs(y = "Ilość wystąpień", title = "Liczba złowionych śledzi") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = sst)) + geom_histogram(binwidth = .1, fill="blue") + labs(y = "Ilość wystąpień", title = "Temperatura powierzchni wody [C]") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = sal)) + geom_histogram(binwidth = .01, fill="blue") + labs(y = "Ilość wystąpień", title = "Poziom zasolenia wody [Knudsen ppt]") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = xmonth)) + geom_histogram(binwidth = .3, fill="blue") + labs(y = "Ilość wystąpień", title = "Numer miesiąca") +
+    scale_y_continuous(labels = scales::comma)
+
+
+ggplot(flatData, aes(x = nao)) + geom_histogram(binwidth = .3, fill="blue") + labs(y = "Ilość wystąpień", title = "Oscylacja północnoatlantycka") +
+    scale_y_continuous(labels = scales::comma)
+
+
+```
+
+# 6. Próba wyznaczenia atrybutów kolejnych lat
+W trakcie analizy danych odkryto, że w kolumnie "miesiące" występują numery 1-12 oznaczające styczeń-grudzień. Do analizy przydatne mogłoby się okazać dopisanie atrybutu roku; W tym kroku podjęto się tej próby.
+Ponieważ atrybut recr to ROCZNY narybek, a wiemy, że śledź z roku na rok malał, dokonano grupowania po kolumnie 'recr' i posortowano względem 'length'
+Okazało się to fałszywym tropem, co pokazuje brak porządku w kolejności atrybutu 'year', gdy posortujemy tabelę po atrybucie 'length' (pokazane poniżej)
+
+```{r, warning=FALSE, echo=FALSE}
+yearlyData <- flatData %>% 
+    arrange(length, recr) %>%
+  group_by(recr) %>%
+  mutate(year = cur_group_id())
+
+
+
+yearlyData
+# yearlyData %>%
+#   summarize(avg_length = mean(length), year) %>%
+#   arrange(avg_length)
+
+```
+
+
+
+# 7. Sekcję sprawdzającą korelacje między zmiennymi; sekcja ta powinna zawierać jakąś formę graficznej prezentacji korelacji.
+
+Korelacje prezentuje poniższy wykres korelacji.
+Interesuje nas korelacja zmiennej 'length' z pozostałymi.
+
+Co ciekawe, korelacja pomiędzy długością śledzia a rokiem połowu (a więc kolumny 'recr' oraz autorska 'year') jest praktycznie żadna.
+
+Korelacje dodatnie:
+- Dostępność planktonu - Calanus helgolandicus gat. 1, 
+- Dostępność planktonu - widłogony gat. 1, 
+- Ułamek pozostawionego narybku,
+- Liczba złowionych śledzi (słaba korelacja)
+
+Korelacje ujemne:
+- Temperatura powierzchni wody [C] (najsilniejsza korelacja z listy)
+- Oscylacja północnoatlantycka
+
+```{r, warning=FALSE, echo=FALSE}
+
+correlationData <- cor(yearlyData)
+corrplot(correlationData, method="square", type="upper", title = "Korelacja między zmiennymi",  order = 'AOE')
+
+
+```
+
+# 8. Interaktywny wykres lub animację, np. prezentującą zmianę rozmiaru śledzi w czasie.
+
+```{r, warning=FALSE, echo=FALSE}
+
+lengthData <- yearlyData %>% arrange(desc(length))
+lengthTime <- ggplot(lengthData, aes(x=X, y=length, color="red")) + geom_smooth() + labs(x = "Numer pomiaru", y = "Długość śledzia", title = "Długość śledzia w czasie") +
+    scale_y_continuous(labels = scales::comma)
+#+ geom_line(aes(x=X, y = mean(length)), colour = "blue", size = .5)
+
+ggplotly(lengthTime)
+
+```
+
+# 9. Sekcję próbującą stworzyć regresor przewidujący rozmiar śledzia (w tej sekcji należy wykorzystać wiedzę z pozostałych punktów oraz wykonać dodatkowe czynności, które mogą poprawić trafność predykcji); dobór parametrów modelu oraz oszacowanie jego skuteczności powinny zostać wykonane za pomocą techniki podziału zbioru na dane uczące, walidujące i testowe; trafność regresji powinna zostać oszacowana na podstawie miar R2 i RMSE.
+
+```{r, warning=FALSE, echo=FALSE}
+
+inTraining <- createDataPartition( y = flatData[,1],p = .7, list = FALSE)
+training <- flatData[ inTraining,]
+testing  <- flatData[-inTraining,]
+ctrl <- trainControl(method = "repeatedcv", number = 2, repeats = 5)
+
+
+```
+
+Random Forest
+
+```{r, warning=FALSE, echo=FALSE}
+
+rfFit <- train(length ~ .,
+             data = training,
+             method = "rf",
+             preProc = c("center", "scale"),
+             trControl = ctrl,
+             tuneGrid = data.frame(mtry = 8),
+             ntree = 30)
+
+rfFit
+
+```
+
+Regresja liniowa
+
+```{r, warning=FALSE, echo=FALSE}
+
+lmFit <- train(length ~ .,
+             data = training,
+             method = "lm",
+             trControl = ctrl
+              )
+
+lmFit
+
+```
+
+KNN
+
+```{r, warning=FALSE, echo=FALSE}
+
+knnFit <- train(length ~ ., data = training,
+                 method = "knn",
+                 preProcess = c("center", "scale"),
+                 tuneLength = 10,
+                 trControl = trainControl(method = "cv"))
+knnFit
+```
+
+Porównując wartości RMSE, Rsquared i MAE wynika, że zgodnie z oczekiwaniami najlepszym modelem jest Random Forest
+
+
+# 10. Analizę ważności atrybutów najlepszego znalezionego modelu regresji. Analiza ważności atrybutów powinna stanowić próbę odpowiedzi na pytanie: co sprawia, że rozmiar śledzi zaczął w pewnym momencie maleć.
+
+Wykres przedstawia ważność atrybutów dla RandomForest. Kilku atrybutów (X - nr pomiaru, oraz xmonth - miesiąc w roku) nie bierzemy pod uwagę:
+X ukazuje skutek, a nie przyczynę karłowacenia, a xmonth nie udziela żadnej informacji ze względu na brak informacji nt. roku.
+
+Wynika z tego, że największy wpływ na karłowacenie śledzi mają:
+- Temperatura przy powierzchni wody
+- Roczny narybek
+- Natężenie połowów w regionie
+
+
+```{r, warning=FALSE, echo=FALSE}
+
+imp <- varImp(rfFit)
+imp
+
+ggplot(imp)
+```
